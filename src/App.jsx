@@ -25,27 +25,52 @@ function createAudioEngine() {
   effectsGain.connect(master);
   master.connect(context.destination);
 
-  const notes = [146.83, 174.61, 220, 261.63, 220, 174.61, 196, 233.08];
-  const musicOscillators = notes.map((frequency, index) => {
+  const scheduleTone = (frequency, start, duration, volume, type = 'sine', destination = musicGain) => {
     const oscillator = context.createOscillator();
     const gain = context.createGain();
-    oscillator.type = index % 3 === 0 ? 'sine' : 'triangle';
-    oscillator.frequency.value = frequency;
-    gain.gain.value = index % 3 === 0 ? 0.32 : 0.12;
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(volume, start + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
     oscillator.connect(gain);
-    gain.connect(musicGain);
-    oscillator.start();
-    return oscillator;
-  });
+    gain.connect(destination);
+    oscillator.start(start);
+    oscillator.stop(start + duration + 0.02);
+  };
+
+  const bassLine = [73.42, 73.42, 87.31, 65.41, 73.42, 73.42, 98, 65.41];
+  const melody = [293.66, 349.23, 392, 440, 392, 349.23, 293.66, 261.63];
+  let bar = 0;
+  const scheduleBar = () => {
+    const start = context.currentTime + 0.04;
+    const barOffset = bar % 4;
+    scheduleTone(bassLine[barOffset * 2], start, 1.8, 0.18, 'sine');
+    scheduleTone(bassLine[barOffset * 2 + 1], start + 1.9, 1.8, 0.15, 'sine');
+    scheduleTone(146.83, start, 3.8, 0.035, 'sawtooth');
+    for (let beat = 0; beat < 8; beat += 1) {
+      const note = melody[(bar * 2 + beat) % melody.length];
+      scheduleTone(note, start + beat * 0.48, 0.32, 0.045, beat % 3 === 0 ? 'triangle' : 'sine');
+      if (beat % 2 === 0) scheduleTone(110, start + beat * 0.48, 0.08, 0.025, 'square');
+    }
+    bar += 1;
+  };
+  scheduleBar();
+  const musicTimer = window.setInterval(scheduleBar, 3800);
 
   return {
     context,
     effectsGain,
-    musicOscillators,
+    musicTimer,
     setMusicEnabled(enabled) {
       musicGain.gain.setTargetAtTime(enabled ? 0.055 : 0, context.currentTime, 0.12);
     },
     play(type = 'click') {
+      if (type === 'complete') {
+        const now = context.currentTime;
+        [523.25, 659.25, 783.99].forEach((frequency, index) => scheduleTone(frequency, now + index * 0.09, 0.38, 0.09, 'triangle', effectsGain));
+        return;
+      }
       const oscillator = context.createOscillator();
       const gain = context.createGain();
       const now = context.currentTime;
