@@ -53,8 +53,8 @@ function createAudioEngine() {
       }
       if (type === 'click') {
         const now = context.currentTime;
-        scheduleTone(880, now, 0.08, 0.2, 'square');
-        scheduleTone(1320, now + 0.045, 0.11, 0.14, 'triangle');
+        scheduleTone(620, now, 0.09, 0.105, 'triangle');
+        scheduleTone(920, now + 0.05, 0.12, 0.07, 'sine');
         return;
       }
       const oscillator = context.createOscillator();
