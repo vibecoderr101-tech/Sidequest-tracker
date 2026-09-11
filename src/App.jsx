@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, Check, ChevronRight, CircleDot, Cpu, Flame, Gauge, Music, Palette, Plus, Sparkles, Target, Zap } from 'lucide-react';
+import { ArrowLeft, Check, ChevronRight, CircleDot, Cpu, Flame, Gauge, Music, Palette, Plus, Sparkles, Speaker, Target, VolumeX, Zap } from 'lucide-react';
 
 const STORAGE_KEY = 'sidequest-items';
 const STATUS_ORDER = ['Not Started', 'In Progress', 'Completed'];
@@ -11,25 +11,67 @@ const CATEGORIES = [
   { id: 'Procreate Art', name: 'Procreate Art', eyebrow: 'CREATION', description: 'Give the impossible a shape.', icon: Palette, accent: 'violet', glyph: '03' }
 ];
 
-function playSystemSound(type = 'click') {
+function createAudioEngine() {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-  if (!AudioContextClass) return;
+  if (!AudioContextClass) return null;
   const context = new AudioContextClass();
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-  const now = context.currentTime;
-  const frequency = type === 'complete' ? 520 : type === 'add' ? 360 : 240;
-  oscillator.type = type === 'complete' ? 'triangle' : 'sine';
-  oscillator.frequency.setValueAtTime(frequency, now);
-  oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.55, now + (type === 'complete' ? 0.18 : 0.1));
-  gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(type === 'complete' ? 0.07 : 0.045, now + 0.012);
-  gain.gain.exponentialRampToValueAtTime(0.0001, now + (type === 'complete' ? 0.3 : 0.16));
-  oscillator.connect(gain);
-  gain.connect(context.destination);
-  oscillator.start(now);
-  oscillator.stop(now + (type === 'complete' ? 0.31 : 0.17));
-  oscillator.addEventListener('ended', () => context.close(), { once: true });
+  const master = context.createGain();
+  const musicGain = context.createGain();
+  const effectsGain = context.createGain();
+  master.gain.value = 0.7;
+  musicGain.gain.value = 0.055;
+  effectsGain.gain.value = 0.8;
+  musicGain.connect(master);
+  effectsGain.connect(master);
+  master.connect(context.destination);
+
+  const notes = [146.83, 174.61, 220, 261.63, 220, 174.61, 196, 233.08];
+  const musicOscillators = notes.map((frequency, index) => {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = index % 3 === 0 ? 'sine' : 'triangle';
+    oscillator.frequency.value = frequency;
+    gain.gain.value = index % 3 === 0 ? 0.32 : 0.12;
+    oscillator.connect(gain);
+    gain.connect(musicGain);
+    oscillator.start();
+    return oscillator;
+  });
+
+  return {
+    context,
+    effectsGain,
+    musicOscillators,
+    setMusicEnabled(enabled) {
+      musicGain.gain.setTargetAtTime(enabled ? 0.055 : 0, context.currentTime, 0.12);
+    },
+    play(type = 'click') {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const now = context.currentTime;
+      const frequency = type === 'complete' ? 520 : type === 'add' ? 360 : 240;
+      oscillator.type = type === 'complete' ? 'triangle' : 'sine';
+      oscillator.frequency.setValueAtTime(frequency, now);
+      oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.55, now + (type === 'complete' ? 0.18 : 0.1));
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(type === 'complete' ? 0.07 : 0.045, now + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + (type === 'complete' ? 0.3 : 0.16));
+      oscillator.connect(gain);
+      gain.connect(effectsGain);
+      oscillator.start(now);
+      oscillator.stop(now + (type === 'complete' ? 0.31 : 0.17));
+    }
+  };
+}
+
+function playSystemSound(audioEngine, type = 'click') {
+  if (!audioEngine) return;
+  if (audioEngine.context.state === 'suspended') audioEngine.context.resume();
+  audioEngine.play(type);
+}
+
+function AudioControl({ isMusicOn, onToggle }) {
+  return <button className="audio-control" onClick={onToggle} title={isMusicOn ? 'Pause system audio' : 'Play system audio'}>{isMusicOn ? <Speaker size={15} /> : <VolumeX size={15} />}<span>{isMusicOn ? 'AUDIO ON' : 'AUDIO OFF'}</span></button>;
 }
 
 export default function App() {
@@ -43,13 +85,35 @@ export default function App() {
   });
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [feedbackPulse, setFeedbackPulse] = useState(false);
+  const [isMusicOn, setIsMusicOn] = useState(false);
+  const audioEngineRef = useRef(null);
+  const musicOnRef = useRef(false);
 
   useEffect(() => {
     try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch {}
   }, [items]);
 
+  const ensureAudioEngine = () => {
+    if (!audioEngineRef.current) audioEngineRef.current = createAudioEngine();
+    if (audioEngineRef.current?.context.state === 'suspended') audioEngineRef.current.context.resume();
+    if (!musicOnRef.current && audioEngineRef.current) {
+      audioEngineRef.current.setMusicEnabled(true);
+      musicOnRef.current = true;
+      setIsMusicOn(true);
+    }
+    return audioEngineRef.current;
+  };
+
+  useEffect(() => {
+    const startAudioOnGesture = () => ensureAudioEngine();
+    window.addEventListener('pointerdown', startAudioOnGesture, { capture: true, once: true });
+    return () => {
+      window.removeEventListener('pointerdown', startAudioOnGesture, { capture: true });
+    };
+  }, []);
+
   const triggerFeedback = (sound) => {
-    playSystemSound(sound);
+    playSystemSound(ensureAudioEngine(), sound);
     setFeedbackPulse(true);
     window.setTimeout(() => setFeedbackPulse(false), 520);
   };
@@ -65,6 +129,15 @@ export default function App() {
     setItems((currentItems) => currentItems.map((item) => item.id === itemId ? { ...item, status: next, updated_at: new Date().toISOString() } : item));
   };
 
+  const toggleAudio = () => {
+    const engine = ensureAudioEngine();
+    const nextValue = !isMusicOn;
+    engine?.setMusicEnabled(nextValue);
+    musicOnRef.current = nextValue;
+    setIsMusicOn(nextValue);
+    if (nextValue) playSystemSound(engine, 'click');
+  };
+
   const totalCompleted = items.filter((item) => item.status === 'Completed').length;
   const totalProgress = items.length ? Math.round((totalCompleted / items.length) * 100) : 0;
 
@@ -75,7 +148,7 @@ export default function App() {
       <main className="app-frame">
         <header className="topbar">
           <div className="brand-lockup"><div className="brand-mark"><Zap size={17} fill="currentColor" /></div><div><p className="brand-name">SIDE<span>QUEST</span></p><p className="brand-subtitle">PERSONAL EVOLUTION SYSTEM</p></div></div>
-          <div className="system-status"><span className="status-dot" /> SYSTEM ONLINE</div>
+          <div className="topbar-actions"><AudioControl isMusicOn={isMusicOn} onToggle={toggleAudio} /><div className="system-status"><span className="status-dot" /> SYSTEM ONLINE</div></div>
         </header>
 
         <AnimatePresence mode="wait">
@@ -87,9 +160,9 @@ export default function App() {
               </section>
               <section className="stats-strip"><Stat icon={Gauge} label="TOTAL PROGRESS" value={`${totalProgress}%`} accent="cyan" /><Stat icon={Target} label="QUESTS CLEARED" value={String(totalCompleted).padStart(2, '0')} accent="gold" /><Stat icon={Flame} label="CURRENT STREAK" value="01 DAY" accent="violet" /></section>
               <div className="section-heading"><div><p className="kicker">CHOOSE YOUR PATH</p><h2>Active domains</h2></div><span className="domain-count">{CATEGORIES.length} DOMAINS UNLOCKED</span></div>
-              <section className="category-grid">{CATEGORIES.map((category, index) => { const categoryItems = items.filter((item) => item.category === category.id); const completed = categoryItems.filter((item) => item.status === 'Completed').length; const percentage = categoryItems.length ? Math.round((completed / categoryItems.length) * 100) : 0; return <CategoryCard key={category.id} category={category} index={index} count={categoryItems.length} completed={completed} percentage={percentage} onClick={() => { playSystemSound('click'); setSelectedCategory(category); }} />; })}</section>
+              <section className="category-grid">{CATEGORIES.map((category, index) => { const categoryItems = items.filter((item) => item.category === category.id); const completed = categoryItems.filter((item) => item.status === 'Completed').length; const percentage = categoryItems.length ? Math.round((completed / categoryItems.length) * 100) : 0; return <CategoryCard key={category.id} category={category} index={index} count={categoryItems.length} completed={completed} percentage={percentage} onClick={() => { triggerFeedback('click'); setSelectedCategory(category); }} />; })}</section>
             </motion.div>
-          ) : <CategoryDetailView key="detail" category={selectedCategory} items={items.filter((item) => item.category === selectedCategory.id)} onBack={() => { playSystemSound('click'); setSelectedCategory(null); }} onAdd={addItem} onToggleStatus={toggleStatus} />}
+          ) : <CategoryDetailView key="detail" category={selectedCategory} items={items.filter((item) => item.category === selectedCategory.id)} onBack={() => { triggerFeedback('click'); setSelectedCategory(null); }} onAdd={addItem} onToggleStatus={toggleStatus} />}
         </AnimatePresence>
         <footer className="app-footer"><span>© SIDEQUEST SYSTEM</span><span>LOCAL STORAGE // PRIVATE BY DEFAULT</span></footer>
       </main>
