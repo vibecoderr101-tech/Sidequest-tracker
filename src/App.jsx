@@ -11,6 +11,27 @@ const CATEGORIES = [
   { id: 'Procreate Art', name: 'Procreate Art', eyebrow: 'CREATION', description: 'Give the impossible a shape.', icon: Palette, accent: 'violet', glyph: '03' }
 ];
 
+function playSystemSound(type = 'click') {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  const context = new AudioContextClass();
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  const now = context.currentTime;
+  const frequency = type === 'complete' ? 520 : type === 'add' ? 360 : 240;
+  oscillator.type = type === 'complete' ? 'triangle' : 'sine';
+  oscillator.frequency.setValueAtTime(frequency, now);
+  oscillator.frequency.exponentialRampToValueAtTime(frequency * 1.55, now + (type === 'complete' ? 0.18 : 0.1));
+  gain.gain.setValueAtTime(0.0001, now);
+  gain.gain.exponentialRampToValueAtTime(type === 'complete' ? 0.07 : 0.045, now + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.0001, now + (type === 'complete' ? 0.3 : 0.16));
+  oscillator.connect(gain);
+  gain.connect(context.destination);
+  oscillator.start(now);
+  oscillator.stop(now + (type === 'complete' ? 0.31 : 0.17));
+  oscillator.addEventListener('ended', () => context.close(), { once: true });
+}
+
 export default function App() {
   const [items, setItems] = useState(() => {
     try {
@@ -21,24 +42,36 @@ export default function App() {
     }
   });
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [feedbackPulse, setFeedbackPulse] = useState(false);
 
   useEffect(() => {
     try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch {}
   }, [items]);
 
-  const addItem = (category, title) => setItems((currentItems) => [...currentItems, { id: crypto.randomUUID(), title, category, status: 'Not Started', updated_at: new Date().toISOString() }]);
-  const toggleStatus = (itemId) => setItems((currentItems) => currentItems.map((item) => {
-    if (item.id !== itemId) return item;
-    const next = item.status === 'Not Started' ? 'In Progress' : item.status === 'In Progress' ? 'Completed' : 'Not Started';
-    return { ...item, status: next, updated_at: new Date().toISOString() };
-  }));
+  const triggerFeedback = (sound) => {
+    playSystemSound(sound);
+    setFeedbackPulse(true);
+    window.setTimeout(() => setFeedbackPulse(false), 520);
+  };
+  const addItem = (category, title) => {
+    triggerFeedback('add');
+    setItems((currentItems) => [...currentItems, { id: crypto.randomUUID(), title, category, status: 'Not Started', updated_at: new Date().toISOString() }]);
+  };
+  const toggleStatus = (itemId) => {
+    const currentItem = items.find((item) => item.id === itemId);
+    if (!currentItem) return;
+    const next = currentItem.status === 'Not Started' ? 'In Progress' : currentItem.status === 'In Progress' ? 'Completed' : 'Not Started';
+    triggerFeedback(next === 'Completed' ? 'complete' : 'click');
+    setItems((currentItems) => currentItems.map((item) => item.id === itemId ? { ...item, status: next, updated_at: new Date().toISOString() } : item));
+  };
 
   const totalCompleted = items.filter((item) => item.status === 'Completed').length;
   const totalProgress = items.length ? Math.round((totalCompleted / items.length) * 100) : 0;
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${feedbackPulse ? 'feedback-pulse' : ''}`}>
       <div className="ambient ambient-one" /><div className="ambient ambient-two" /><div className="grid-overlay" />
+      <div className="energy-field" aria-hidden="true"><div className="energy-mist mist-one" /><div className="energy-mist mist-two" /><div className="shadow-figure"><span /><span /><span /></div><div className="energy-arc arc-one" /><div className="energy-arc arc-two" /><div className="particle-cloud">{Array.from({ length: 18 }, (_, index) => <i key={index} />)}</div></div>
       <main className="app-frame">
         <header className="topbar">
           <div className="brand-lockup"><div className="brand-mark"><Zap size={17} fill="currentColor" /></div><div><p className="brand-name">SIDE<span>QUEST</span></p><p className="brand-subtitle">PERSONAL EVOLUTION SYSTEM</p></div></div>
@@ -54,9 +87,9 @@ export default function App() {
               </section>
               <section className="stats-strip"><Stat icon={Gauge} label="TOTAL PROGRESS" value={`${totalProgress}%`} accent="cyan" /><Stat icon={Target} label="QUESTS CLEARED" value={String(totalCompleted).padStart(2, '0')} accent="gold" /><Stat icon={Flame} label="CURRENT STREAK" value="01 DAY" accent="violet" /></section>
               <div className="section-heading"><div><p className="kicker">CHOOSE YOUR PATH</p><h2>Active domains</h2></div><span className="domain-count">{CATEGORIES.length} DOMAINS UNLOCKED</span></div>
-              <section className="category-grid">{CATEGORIES.map((category, index) => { const categoryItems = items.filter((item) => item.category === category.id); const completed = categoryItems.filter((item) => item.status === 'Completed').length; const percentage = categoryItems.length ? Math.round((completed / categoryItems.length) * 100) : 0; return <CategoryCard key={category.id} category={category} index={index} count={categoryItems.length} completed={completed} percentage={percentage} onClick={() => setSelectedCategory(category)} />; })}</section>
+              <section className="category-grid">{CATEGORIES.map((category, index) => { const categoryItems = items.filter((item) => item.category === category.id); const completed = categoryItems.filter((item) => item.status === 'Completed').length; const percentage = categoryItems.length ? Math.round((completed / categoryItems.length) * 100) : 0; return <CategoryCard key={category.id} category={category} index={index} count={categoryItems.length} completed={completed} percentage={percentage} onClick={() => { playSystemSound('click'); setSelectedCategory(category); }} />; })}</section>
             </motion.div>
-          ) : <CategoryDetailView key="detail" category={selectedCategory} items={items.filter((item) => item.category === selectedCategory.id)} onBack={() => setSelectedCategory(null)} onAdd={addItem} onToggleStatus={toggleStatus} />}
+          ) : <CategoryDetailView key="detail" category={selectedCategory} items={items.filter((item) => item.category === selectedCategory.id)} onBack={() => { playSystemSound('click'); setSelectedCategory(null); }} onAdd={addItem} onToggleStatus={toggleStatus} />}
         </AnimatePresence>
         <footer className="app-footer"><span>© SIDEQUEST SYSTEM</span><span>LOCAL STORAGE // PRIVATE BY DEFAULT</span></footer>
       </main>
