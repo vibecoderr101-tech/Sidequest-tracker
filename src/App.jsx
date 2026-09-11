@@ -120,6 +120,7 @@ export default function App() {
   const [isMusicOn, setIsMusicOn] = useState(false);
   const audioEngineRef = useRef(null);
   const musicOnRef = useRef(false);
+  const musicSuppressedRef = useRef(false);
 
   useEffect(() => {
     try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch {}
@@ -128,7 +129,7 @@ export default function App() {
   const ensureAudioEngine = () => {
     if (!audioEngineRef.current) audioEngineRef.current = createAudioEngine();
     if (audioEngineRef.current?.context.state === 'suspended') audioEngineRef.current.context.resume();
-    if (!musicOnRef.current && audioEngineRef.current) {
+    if (!musicOnRef.current && !musicSuppressedRef.current && audioEngineRef.current) {
       audioEngineRef.current.setMusicEnabled(true);
       musicOnRef.current = true;
       setIsMusicOn(true);
@@ -137,10 +138,14 @@ export default function App() {
   };
 
   useEffect(() => {
-    const startAudioOnGesture = () => ensureAudioEngine();
-    window.addEventListener('pointerdown', startAudioOnGesture, { capture: true, once: true });
+    const handleGlobalClick = (event) => {
+      const clickable = event.target.closest('button, a, [role="button"], input[type="submit"]');
+      if (!clickable || clickable.matches('.audio-control, .quest-card')) return;
+      playSystemSound(ensureAudioEngine(), 'click');
+    };
+    window.addEventListener('pointerdown', handleGlobalClick, true);
     return () => {
-      window.removeEventListener('pointerdown', startAudioOnGesture, { capture: true });
+      window.removeEventListener('pointerdown', handleGlobalClick, true);
     };
   }, []);
 
@@ -165,6 +170,7 @@ export default function App() {
     const engine = ensureAudioEngine();
     const nextValue = !isMusicOn;
     engine?.setMusicEnabled(nextValue);
+    musicSuppressedRef.current = !nextValue;
     musicOnRef.current = nextValue;
     setIsMusicOn(nextValue);
     if (nextValue) playSystemSound(engine, 'click');
@@ -192,9 +198,9 @@ export default function App() {
               </section>
               <section className="stats-strip"><Stat icon={Gauge} label="TOTAL PROGRESS" value={`${totalProgress}%`} accent="cyan" /><Stat icon={Target} label="QUESTS CLEARED" value={String(totalCompleted).padStart(2, '0')} accent="gold" /><Stat icon={Flame} label="CURRENT STREAK" value="01 DAY" accent="violet" /></section>
               <div className="section-heading"><div><p className="kicker">CHOOSE YOUR PATH</p><h2>Active domains</h2></div><span className="domain-count">{CATEGORIES.length} DOMAINS UNLOCKED</span></div>
-              <section className="category-grid">{CATEGORIES.map((category, index) => { const categoryItems = items.filter((item) => item.category === category.id); const completed = categoryItems.filter((item) => item.status === 'Completed').length; const percentage = categoryItems.length ? Math.round((completed / categoryItems.length) * 100) : 0; return <CategoryCard key={category.id} category={category} index={index} count={categoryItems.length} completed={completed} percentage={percentage} onClick={() => { triggerFeedback('click'); setSelectedCategory(category); }} />; })}</section>
+              <section className="category-grid">{CATEGORIES.map((category, index) => { const categoryItems = items.filter((item) => item.category === category.id); const completed = categoryItems.filter((item) => item.status === 'Completed').length; const percentage = categoryItems.length ? Math.round((completed / categoryItems.length) * 100) : 0; return <CategoryCard key={category.id} category={category} index={index} count={categoryItems.length} completed={completed} percentage={percentage} onClick={() => setSelectedCategory(category)} />; })}</section>
             </motion.div>
-          ) : <CategoryDetailView key="detail" category={selectedCategory} items={items.filter((item) => item.category === selectedCategory.id)} onBack={() => { triggerFeedback('click'); setSelectedCategory(null); }} onAdd={addItem} onToggleStatus={toggleStatus} />}
+          ) : <CategoryDetailView key="detail" category={selectedCategory} items={items.filter((item) => item.category === selectedCategory.id)} onBack={() => setSelectedCategory(null)} onAdd={addItem} onToggleStatus={toggleStatus} />}
         </AnimatePresence>
         <footer className="app-footer"><span>© SIDEQUEST SYSTEM</span><span>LOCAL STORAGE // PRIVATE BY DEFAULT</span></footer>
       </main>
