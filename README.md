@@ -1,5 +1,7 @@
 # SideQuest Tracker
 
+SideQuest stores quest data automatically in the browser's local storage. No account, database, or environment variables are required. Data stays on the device and browser where the app is used.
+
 ## Local setup
 
 Install dependencies and start the development server:
@@ -8,16 +10,6 @@ Install dependencies and start the development server:
 npm install
 npm run dev
 ```
-
-The app uses Supabase for authentication and quest data. Copy `.env.example` to `.env.local`, replace both values with the URL and anon key from your Supabase project, and restart Vite:
-
-```bash
-cp .env.example .env.local
-```
-
-Without these variables, the app shows a configuration message instead of crashing on startup.
-
-Create a `hobby_items` table with `id`, `title`, `category`, `status`, `user_id`, and `updated_at` columns. Enable Supabase email OTP authentication and configure row-level security so users can access their own rows.
 
 ## Template notes
 
