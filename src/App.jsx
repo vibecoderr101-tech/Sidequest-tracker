@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, Check, ChevronRight, CircleDot, Cpu, Flame, Gauge, Music, Palette, Plus, Sparkles, Speaker, Target, VolumeX, Zap } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Check, ChevronRight, CircleDot, Cpu, Flame, Gauge, Music, Palette, Plus, Sparkles, Speaker, Target, VolumeX, Zap } from 'lucide-react';
 
 const STORAGE_KEY = 'sidequest-items';
 const STATUS_ORDER = ['Not Started', 'In Progress', 'Completed'];
@@ -18,12 +18,19 @@ function createAudioEngine() {
   const master = context.createGain();
   const musicGain = context.createGain();
   const effectsGain = context.createGain();
-  master.gain.value = 0.7;
-  musicGain.gain.value = 0.055;
-  effectsGain.gain.value = 0.8;
+  const compressor = context.createDynamicsCompressor();
+  master.gain.value = 0.9;
+  musicGain.gain.value = 0.14;
+  effectsGain.gain.value = 0.9;
+  compressor.threshold.value = -24;
+  compressor.knee.value = 18;
+  compressor.ratio.value = 8;
+  compressor.attack.value = 0.003;
+  compressor.release.value = 0.25;
   musicGain.connect(master);
   effectsGain.connect(master);
-  master.connect(context.destination);
+  master.connect(compressor);
+  compressor.connect(context.destination);
 
   const scheduleTone = (frequency, start, duration, volume, type = 'sine', destination = musicGain) => {
     const oscillator = context.createOscillator();
@@ -45,25 +52,25 @@ function createAudioEngine() {
   const scheduleBar = () => {
     const start = context.currentTime + 0.04;
     const barOffset = bar % 4;
-    scheduleTone(bassLine[barOffset * 2], start, 1.8, 0.18, 'sine');
-    scheduleTone(bassLine[barOffset * 2 + 1], start + 1.9, 1.8, 0.15, 'sine');
-    scheduleTone(146.83, start, 3.8, 0.035, 'sawtooth');
+    scheduleTone(bassLine[barOffset * 2], start, 1.15, 0.32, 'sine');
+    scheduleTone(bassLine[barOffset * 2 + 1], start + 1.2, 1.15, 0.28, 'sine');
+    scheduleTone(146.83, start, 2.35, 0.07, 'sawtooth');
     for (let beat = 0; beat < 8; beat += 1) {
       const note = melody[(bar * 2 + beat) % melody.length];
-      scheduleTone(note, start + beat * 0.48, 0.32, 0.045, beat % 3 === 0 ? 'triangle' : 'sine');
-      if (beat % 2 === 0) scheduleTone(110, start + beat * 0.48, 0.08, 0.025, 'square');
+      scheduleTone(note, start + beat * 0.29, 0.2, 0.085, beat % 3 === 0 ? 'triangle' : 'sine');
+      if (beat % 2 === 0) scheduleTone(110, start + beat * 0.29, 0.08, 0.05, 'square');
     }
     bar += 1;
   };
   scheduleBar();
-  const musicTimer = window.setInterval(scheduleBar, 3800);
+  const musicTimer = window.setInterval(scheduleBar, 2400);
 
   return {
     context,
     effectsGain,
     musicTimer,
     setMusicEnabled(enabled) {
-      musicGain.gain.setTargetAtTime(enabled ? 0.055 : 0, context.currentTime, 0.12);
+      musicGain.gain.setTargetAtTime(enabled ? 0.14 : 0, context.currentTime, 0.12);
     },
     play(type = 'click') {
       if (type === 'complete') {
@@ -199,7 +206,7 @@ function Stat({ icon: Icon, label, value, accent }) { return <div className={`st
 
 function CategoryCard({ category, index, count, completed, percentage, onClick }) {
   const Icon = category.icon;
-  return <motion.button className={`category-card accent-${category.accent}`} onClick={onClick} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.08 }} whileHover={{ y: -6 }} whileTap={{ scale: 0.98 }}><div className="card-glow" /><div className="card-topline"><span className="card-index">DOMAIN / {category.glyph}</span><ChevronRight size={18} /></div><div className="category-icon"><Icon size={25} /></div><p className="card-eyebrow">{category.eyebrow}</p><h3>{category.name}</h3><p className="card-description">{category.description}</p><div className="card-progress-meta"><span>{completed} / {count} CLEARED</span><strong>{percentage}%</strong></div><div className="progress-track"><motion.div initial={{ width: 0 }} animate={{ width: `${percentage}%` }} transition={{ delay: 0.35, duration: 0.8 }} /></div><div className="card-cta">ENTER DOMAIN <span>↗</span></div></motion.button>;
+  return <motion.button className={`category-card accent-${category.accent}`} onClick={onClick} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.08 }} whileHover={{ y: -6 }} whileTap={{ scale: 0.98 }}><div className="card-glow" /><div className="card-topline"><span className="card-index">DOMAIN / {category.glyph}</span><ChevronRight size={18} /></div><div className="category-icon"><Icon size={25} /></div><p className="card-eyebrow">{category.eyebrow}</p><h3>{category.name}</h3><p className="card-description">{category.description}</p><div className="card-progress-meta"><span>{completed} / {count} CLEARED</span><strong>{percentage}%</strong></div><div className="progress-track"><motion.div initial={{ width: 0 }} animate={{ width: `${percentage}%` }} transition={{ delay: 0.35, duration: 0.8 }} /></div><div className="card-cta">ENTER DOMAIN <ArrowUpRight size={17} strokeWidth={2.5} /></div></motion.button>;
 }
 
 function CategoryDetailView({ category, items, onBack, onAdd, onToggleStatus }) {
