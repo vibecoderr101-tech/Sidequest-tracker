@@ -4,6 +4,8 @@ SideQuest stores quest data automatically in the browser's local storage. No acc
 
 Live app: https://vibecoderr101-tech.github.io/Sidequest-tracker/
 
+Deployment uses GitHub Actions and publishes the Vite production build.
+
 ## Local setup
 
 Install dependencies and start the development server:
