@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowLeft, ArrowUpRight, Check, ChevronRight, CircleDot, Cpu, Flame, Gauge, Music, Palette, Plus, Sparkles, Speaker, Target, VolumeX, Zap } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Check, ChevronRight, CircleDot, Cpu, Flame, Gauge, Music, Palette, Plus, Sparkles, Target, Zap } from 'lucide-react';
 
 const STORAGE_KEY = 'sidequest-items';
 const STATUS_ORDER = ['Not Started', 'In Progress', 'Completed'];
@@ -16,23 +16,20 @@ function createAudioEngine() {
   if (!AudioContextClass) return null;
   const context = new AudioContextClass();
   const master = context.createGain();
-  const musicGain = context.createGain();
   const effectsGain = context.createGain();
   const compressor = context.createDynamicsCompressor();
   master.gain.value = 0.9;
-  musicGain.gain.value = 0.14;
-  effectsGain.gain.value = 0.9;
+  effectsGain.gain.value = 1;
   compressor.threshold.value = -24;
   compressor.knee.value = 18;
   compressor.ratio.value = 8;
   compressor.attack.value = 0.003;
   compressor.release.value = 0.25;
-  musicGain.connect(master);
   effectsGain.connect(master);
   master.connect(compressor);
   compressor.connect(context.destination);
 
-  const scheduleTone = (frequency, start, duration, volume, type = 'sine', destination = musicGain) => {
+  const scheduleTone = (frequency, start, duration, volume, type = 'sine', destination = effectsGain) => {
     const oscillator = context.createOscillator();
     const gain = context.createGain();
     oscillator.type = type;
@@ -46,36 +43,18 @@ function createAudioEngine() {
     oscillator.stop(start + duration + 0.02);
   };
 
-  const bassLine = [73.42, 73.42, 87.31, 65.41, 73.42, 73.42, 98, 65.41];
-  const melody = [293.66, 349.23, 392, 440, 392, 349.23, 293.66, 261.63];
-  let bar = 0;
-  const scheduleBar = () => {
-    const start = context.currentTime + 0.04;
-    const barOffset = bar % 4;
-    scheduleTone(bassLine[barOffset * 2], start, 1.15, 0.32, 'sine');
-    scheduleTone(bassLine[barOffset * 2 + 1], start + 1.2, 1.15, 0.28, 'sine');
-    scheduleTone(146.83, start, 2.35, 0.07, 'sawtooth');
-    for (let beat = 0; beat < 8; beat += 1) {
-      const note = melody[(bar * 2 + beat) % melody.length];
-      scheduleTone(note, start + beat * 0.29, 0.2, 0.085, beat % 3 === 0 ? 'triangle' : 'sine');
-      if (beat % 2 === 0) scheduleTone(110, start + beat * 0.29, 0.08, 0.05, 'square');
-    }
-    bar += 1;
-  };
-  scheduleBar();
-  const musicTimer = window.setInterval(scheduleBar, 2400);
-
   return {
     context,
-    effectsGain,
-    musicTimer,
-    setMusicEnabled(enabled) {
-      musicGain.gain.setTargetAtTime(enabled ? 0.14 : 0, context.currentTime, 0.12);
-    },
     play(type = 'click') {
       if (type === 'complete') {
         const now = context.currentTime;
-        [523.25, 659.25, 783.99].forEach((frequency, index) => scheduleTone(frequency, now + index * 0.09, 0.38, 0.09, 'triangle', effectsGain));
+        [523.25, 659.25, 783.99].forEach((frequency, index) => scheduleTone(frequency, now + index * 0.09, 0.38, 0.16, 'triangle'));
+        return;
+      }
+      if (type === 'click') {
+        const now = context.currentTime;
+        scheduleTone(880, now, 0.08, 0.2, 'square');
+        scheduleTone(1320, now + 0.045, 0.11, 0.14, 'triangle');
         return;
       }
       const oscillator = context.createOscillator();
@@ -102,10 +81,6 @@ function playSystemSound(audioEngine, type = 'click') {
   audioEngine.play(type);
 }
 
-function AudioControl({ isMusicOn, onToggle }) {
-  return <button className="audio-control" onClick={onToggle} title={isMusicOn ? 'Pause system audio' : 'Play system audio'}>{isMusicOn ? <Speaker size={15} /> : <VolumeX size={15} />}<span>{isMusicOn ? 'AUDIO ON' : 'AUDIO OFF'}</span></button>;
-}
-
 export default function App() {
   const [items, setItems] = useState(() => {
     try {
@@ -117,10 +92,7 @@ export default function App() {
   });
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [feedbackPulse, setFeedbackPulse] = useState(false);
-  const [isMusicOn, setIsMusicOn] = useState(false);
   const audioEngineRef = useRef(null);
-  const musicOnRef = useRef(false);
-  const musicSuppressedRef = useRef(false);
 
   useEffect(() => {
     try { window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch {}
@@ -129,18 +101,13 @@ export default function App() {
   const ensureAudioEngine = () => {
     if (!audioEngineRef.current) audioEngineRef.current = createAudioEngine();
     if (audioEngineRef.current?.context.state === 'suspended') audioEngineRef.current.context.resume();
-    if (!musicOnRef.current && !musicSuppressedRef.current && audioEngineRef.current) {
-      audioEngineRef.current.setMusicEnabled(true);
-      musicOnRef.current = true;
-      setIsMusicOn(true);
-    }
     return audioEngineRef.current;
   };
 
   useEffect(() => {
     const handleGlobalClick = (event) => {
       const clickable = event.target.closest('button, a, [role="button"], input[type="submit"]');
-      if (!clickable || clickable.matches('.audio-control, .quest-card')) return;
+      if (!clickable || clickable.matches('.quest-card')) return;
       playSystemSound(ensureAudioEngine(), 'click');
     };
     window.addEventListener('pointerdown', handleGlobalClick, true);
@@ -166,16 +133,6 @@ export default function App() {
     setItems((currentItems) => currentItems.map((item) => item.id === itemId ? { ...item, status: next, updated_at: new Date().toISOString() } : item));
   };
 
-  const toggleAudio = () => {
-    const engine = ensureAudioEngine();
-    const nextValue = !isMusicOn;
-    engine?.setMusicEnabled(nextValue);
-    musicSuppressedRef.current = !nextValue;
-    musicOnRef.current = nextValue;
-    setIsMusicOn(nextValue);
-    if (nextValue) playSystemSound(engine, 'click');
-  };
-
   const totalCompleted = items.filter((item) => item.status === 'Completed').length;
   const totalProgress = items.length ? Math.round((totalCompleted / items.length) * 100) : 0;
 
@@ -186,7 +143,7 @@ export default function App() {
       <main className="app-frame">
         <header className="topbar">
           <div className="brand-lockup"><div className="brand-mark"><Zap size={17} fill="currentColor" /></div><div><p className="brand-name">SIDE<span>QUEST</span></p><p className="brand-subtitle">PERSONAL EVOLUTION SYSTEM</p></div></div>
-          <div className="topbar-actions"><AudioControl isMusicOn={isMusicOn} onToggle={toggleAudio} /><div className="system-status"><span className="status-dot" /> SYSTEM ONLINE</div></div>
+          <div className="system-status"><span className="status-dot" /> SYSTEM ONLINE</div>
         </header>
 
         <AnimatePresence mode="wait">
