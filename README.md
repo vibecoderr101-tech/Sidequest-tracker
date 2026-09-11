@@ -2,6 +2,8 @@
 
 SideQuest stores quest data automatically in the browser's local storage. No account, database, or environment variables are required. Data stays on the device and browser where the app is used.
 
+Live app: https://vibecoderr101-tech.github.io/Sidequest-tracker/
+
 ## Local setup
 
 Install dependencies and start the development server:
