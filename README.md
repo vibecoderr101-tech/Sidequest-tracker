@@ -1,4 +1,25 @@
-# React + Vite
+# SideQuest Tracker
+
+## Local setup
+
+Install dependencies and start the development server:
+
+```bash
+npm install
+npm run dev
+```
+
+The app uses Supabase for authentication and quest data. Copy `.env.example` to `.env.local`, replace both values with the URL and anon key from your Supabase project, and restart Vite:
+
+```bash
+cp .env.example .env.local
+```
+
+Without these variables, the app shows a configuration message instead of crashing on startup.
+
+Create a `hobby_items` table with `id`, `title`, `category`, `status`, `user_id`, and `updated_at` columns. Enable Supabase email OTP authentication and configure row-level security so users can access their own rows.
+
+## Template notes
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 

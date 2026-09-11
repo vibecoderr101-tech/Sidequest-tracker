@@ -3,8 +3,11 @@ import { createClient } from '@supabase/supabase-js';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Cpu, Music, Palette, Plus, ArrowLeft } from 'lucide-react';
 
-// PASTE YOUR SUPABASE KEYS HERE
-const supabase = createClient('YOUR_SUPABASE_URL', 'YOUR_SUPABASE_ANON_KEY');
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null;
 
 const CATEGORIES = [
   { id: 'Work & Tech', name: 'Work & Tech', icon: Cpu, gradient: 'from-blue-600 to-cyan-400', border: 'border-blue-500/30' },
@@ -16,25 +19,60 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [items, setItems] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState('');
+  const [dataError, setDataError] = useState('');
+
+  async function fetchItems() {
+    const { data, error: fetchError } = await supabase
+      .from('hobby_items')
+      .select('*')
+      .order('updated_at', { ascending: false });
+
+    if (fetchError) {
+      setDataError(fetchError.message);
+      return;
+    }
+
+    setDataError('');
+    setItems(data ?? []);
+  }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    if (!supabase) {
+      return undefined;
+    }
+
+    let mounted = true;
+
+    supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
+      if (!mounted) return;
+      if (sessionError) setAuthError(sessionError.message);
       setSession(session);
+      setLoading(false);
       if (session) fetchItems();
+    }).catch((sessionError) => {
+      if (!mounted) return;
+      setAuthError(sessionError.message);
+      setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
-      if (session) fetchItems();
+      if (event === 'SIGNED_IN' && window.location.hash) {
+        window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+      }
+      if (session && event !== 'INITIAL_SESSION') fetchItems();
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const fetchItems = async () => {
-    const { data } = await supabase.from('hobby_items').select('*').order('updated_at', { ascending: false });
-    if (data) setItems(data);
-  };
+  if (!supabase) return <ConfigurationScreen />;
+  if (loading) return <LoadingScreen />;
 
   if (!session) return <AuthScreen />;
 
@@ -81,23 +119,33 @@ export default function App() {
               })}
             </motion.div>
           ) : (
-            <CategoryDetailView category={selectedCategory} items={items.filter(i => i.category === selectedCategory.id)} onBack={() => setSelectedCategory(null)} onRefresh={fetchItems} />
+            <CategoryDetailView category={selectedCategory} items={items.filter(i => i.category === selectedCategory.id)} onBack={() => setSelectedCategory(null)} onRefresh={fetchItems} onError={setDataError} />
           )}
         </AnimatePresence>
+        {authError && <InlineError message={authError} />}
+        {dataError && <InlineError message={`Your account is signed in, but quests could not be loaded: ${dataError}`} />}
       </div>
     </div>
   );
 }
 
-function CategoryDetailView({ category, items, onBack, onRefresh }) {
+function CategoryDetailView({ category, items, onBack, onRefresh, onError }) {
   const [title, setTitle] = useState('');
   const [adding, setAdding] = useState(false);
 
   const addItem = async (e) => {
     e.preventDefault();
     if (!title.trim()) return;
-    const { data: { user } } = await supabase.auth.getUser();
-    await supabase.from('hobby_items').insert([{ title, category: category.id, status: 'Not Started', user_id: user.id }]);
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      onError(userError?.message ?? 'Your session has expired. Please sign in again.');
+      return;
+    }
+    const { error: insertError } = await supabase.from('hobby_items').insert([{ title: title.trim(), category: category.id, status: 'Not Started', user_id: user.id }]);
+    if (insertError) {
+      onError(insertError.message);
+      return;
+    }
     setTitle('');
     setAdding(false);
     onRefresh();
@@ -105,7 +153,11 @@ function CategoryDetailView({ category, items, onBack, onRefresh }) {
 
   const toggleStatus = async (item) => {
     const next = item.status === 'Not Started' ? 'In Progress' : item.status === 'In Progress' ? 'Completed' : 'Not Started';
-    await supabase.from('hobby_items').update({ status: next }).eq('id', item.id);
+    const { error: updateError } = await supabase.from('hobby_items').update({ status: next }).eq('id', item.id);
+    if (updateError) {
+      onError(updateError.message);
+      return;
+    }
     onRefresh();
   };
 
@@ -141,10 +193,19 @@ function CategoryDetailView({ category, items, onBack, onRefresh }) {
 function AuthScreen() {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
 
   const login = async (e) => {
     e.preventDefault();
-    await supabase.auth.signInWithOtp({ email });
+    setError('');
+    const { error: loginError } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: { emailRedirectTo: window.location.origin }
+    });
+    if (loginError) {
+      setError(loginError.message);
+      return;
+    }
     setSent(true);
   };
 
@@ -162,6 +223,34 @@ function AuthScreen() {
           <button type="submit" className="w-full bg-white text-black font-semibold rounded-2xl py-3 text-sm">Send Magic Link</button>
         </form>
       )}
+      {error && <InlineError message={error} />}
+    </div>
+  );
+}
+
+function ConfigurationScreen() {
+  return (
+    <div className="min-h-screen bg-black text-white flex flex-col justify-center px-6 max-w-lg mx-auto">
+      <h1 className="text-3xl font-bold">SideQuest.</h1>
+      <p className="text-gray-400 text-sm mt-3">
+        Supabase is not configured yet. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to a local .env file, then restart the dev server.
+      </p>
+    </div>
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen bg-black text-white flex items-center justify-center px-6">
+      <p className="text-gray-400 text-sm">Loading SideQuest...</p>
+    </div>
+  );
+}
+
+function InlineError({ message }) {
+  return (
+    <div className="mt-6 rounded-2xl border border-red-400/30 bg-red-950/40 p-4 text-sm text-red-200">
+      {message}
     </div>
   );
 }
