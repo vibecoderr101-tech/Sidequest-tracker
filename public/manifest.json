@@ -4,6 +4,14 @@
   "start_url": "/Sidequest-tracker/",
   "scope": "/Sidequest-tracker/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#000000"
+  "background_color": "#070912",
+  "theme_color": "#070912",
+  "icons": [
+    {
+      "src": "/Sidequest-tracker/favicon.svg",
+      "sizes": "48x46",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
 }

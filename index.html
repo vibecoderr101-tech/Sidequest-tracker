@@ -3,14 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#070912" />
+    <link rel="apple-touch-icon" href="/favicon.svg" />
     <title>sidequest-tracker</title>
-    <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="SideQuest">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <meta name="apple-mobile-web-app-title" content="SideQuest">
+        <style>
+          html, body { background: #070912; }
+          #launch-shell { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; overflow: hidden; color: #baf6ff; background: radial-gradient(circle at center, #152e53, #050813 58%); transition: opacity .45s ease; }
+          #launch-shell::before { content: ''; position: absolute; width: 150px; height: 150px; border: 1px solid rgba(131, 235, 255, .62); transform: rotate(45deg); box-shadow: 0 0 36px rgba(73, 215, 255, .38), inset 0 0 35px rgba(112, 93, 255, .32); animation: launch-mark 2.45s ease-in forwards; }
+          #launch-shell svg { position: relative; width: 64px; height: 64px; fill: currentColor; filter: drop-shadow(0 0 13px #6cecff); animation: launch-logo 2.45s ease-in forwards; }
+          #launch-shell span { position: absolute; top: calc(50% + 112px); color: #eefcff; font: 700 24px/1 sans-serif; letter-spacing: .2em; animation: launch-copy 2.45s ease-in forwards; }
+          #launch-shell span b { color: #82eaff; font-weight: inherit; }
+          @keyframes launch-mark { 0%, 70% { opacity: 1; } 85% { box-shadow: 0 0 90px 25px rgba(90, 224, 255, .65); } 100% { opacity: 0; transform: rotate(45deg) scale(2.8); } }
+          @keyframes launch-logo { 0% { opacity: 0; transform: scale(.4); } 25% { opacity: 1; transform: scale(1); } 82% { opacity: 1; } 100% { opacity: 0; transform: scale(2.2); } }
+          @keyframes launch-copy { 0%, 78% { opacity: 1; } 100% { opacity: 0; transform: translateY(-8px); } }
+        </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div id="launch-shell" aria-hidden="true"><svg viewBox="0 0 48 46" role="presentation"><path d="M25.946 44.938c-.664.845-2.021.375-2.021-.698V33.937a2.26 2.26 0 0 0-2.262-2.262H10.287c-.92 0-1.456-1.04-.92-1.788l7.48-10.471c1.07-1.497 0-3.578-1.842-3.578H1.237c-.92 0-1.456-1.04-.92-1.788L10.013.474c.214-.297.556-.474.92-.474h28.894c.92 0 1.456 1.04.92 1.788l-7.48 10.471c-1.07 1.498 0 3.579 1.842 3.579h11.377c.943 0 1.473 1.088.89 1.83L25.947 44.94z" /></svg><span>SIDE<b>QUEST</b></span></div></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

@@ -14,7 +14,12 @@ const CATEGORIES = [
 function createAudioEngine() {
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextClass) return null;
-  const context = new AudioContextClass();
+  let context;
+  try {
+    context = new AudioContextClass();
+  } catch {
+    return null;
+  }
   const master = context.createGain();
   const effectsGain = context.createGain();
   const compressor = context.createDynamicsCompressor();
@@ -77,8 +82,18 @@ function createAudioEngine() {
 
 function playSystemSound(audioEngine, type = 'click') {
   if (!audioEngine) return;
-  if (audioEngine.context.state === 'suspended') audioEngine.context.resume();
-  audioEngine.play(type);
+  if (audioEngine.context.state === 'closed') return;
+  const play = () => {
+    try {
+      audioEngine.play(type);
+    } catch {
+    }
+  };
+  if (audioEngine.context.state === 'suspended') {
+    audioEngine.context.resume().then(play).catch(() => {});
+    return;
+  }
+  play();
 }
 
 export default function App() {
@@ -92,6 +107,7 @@ export default function App() {
   });
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [feedbackPulse, setFeedbackPulse] = useState(false);
+  const [isBooting, setIsBooting] = useState(true);
   const audioEngineRef = useRef(null);
 
   useEffect(() => {
@@ -100,9 +116,14 @@ export default function App() {
 
   const ensureAudioEngine = () => {
     if (!audioEngineRef.current) audioEngineRef.current = createAudioEngine();
-    if (audioEngineRef.current?.context.state === 'suspended') audioEngineRef.current.context.resume();
+    if (audioEngineRef.current?.context.state === 'closed') audioEngineRef.current = createAudioEngine();
     return audioEngineRef.current;
   };
+
+  useEffect(() => {
+    const bootTimer = window.setTimeout(() => setIsBooting(false), 2600);
+    return () => window.clearTimeout(bootTimer);
+  }, []);
 
   useEffect(() => {
     const handleGlobalClick = (event) => {
@@ -138,6 +159,7 @@ export default function App() {
 
   return (
     <div className={`app-shell ${feedbackPulse ? 'feedback-pulse' : ''}`}>
+      <AnimatePresence>{isBooting && <BootScreen />}</AnimatePresence>
       <div className="ambient ambient-one" /><div className="ambient ambient-two" /><div className="grid-overlay" />
       <div className="energy-field" aria-hidden="true"><div className="energy-mist mist-one" /><div className="energy-mist mist-two" /><div className="shadow-figure"><span /><span /><span /></div><div className="energy-arc arc-one" /><div className="energy-arc arc-two" /><div className="particle-cloud">{Array.from({ length: 18 }, (_, index) => <i key={index} />)}</div></div>
       <main className="app-frame">
@@ -149,12 +171,12 @@ export default function App() {
         <AnimatePresence mode="wait">
           {!selectedCategory ? (
             <motion.div key="dashboard" className="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <section className="hero-panel">
+              <motion.section className="hero-panel" initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55 }}>
                 <div className="hero-copy"><p className="kicker"><Sparkles size={14} /> DAILY PROTOCOL</p><h1>Become the <em>strongest</em><br />version of you.</h1><p className="hero-description">Small quests. Real momentum. Your progress is stored safely on this device.</p><div className="hero-actions"><span className="sync-label"><span className="pulse-dot" /> AUTO-SAVE ACTIVE</span><span className="hero-divider" /><span className="hero-date">{new Intl.DateTimeFormat('en', { weekday: 'long', month: 'short', day: 'numeric' }).format(new Date())}</span></div></div>
                 <div className="hero-orbit" aria-hidden="true"><div className="orbit-ring ring-one" /><div className="orbit-ring ring-two" /><div className="hero-core"><span>LVL</span><strong>{Math.max(1, totalCompleted + 1).toString().padStart(2, '0')}</strong></div><div className="orbit-spark spark-one" /><div className="orbit-spark spark-two" /></div>
-              </section>
-              <section className="stats-strip"><Stat icon={Gauge} label="TOTAL PROGRESS" value={`${totalProgress}%`} accent="cyan" /><Stat icon={Target} label="QUESTS CLEARED" value={String(totalCompleted).padStart(2, '0')} accent="gold" /><Stat icon={Flame} label="CURRENT STREAK" value="01 DAY" accent="violet" /></section>
-              <div className="section-heading"><div><p className="kicker">CHOOSE YOUR PATH</p><h2>Active domains</h2></div><span className="domain-count">{CATEGORIES.length} DOMAINS UNLOCKED</span></div>
+              </motion.section>
+              <motion.section className="stats-strip" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18, duration: 0.5 }}><Stat icon={Gauge} label="TOTAL PROGRESS" value={`${totalProgress}%`} accent="cyan" /><Stat icon={Target} label="QUESTS CLEARED" value={String(totalCompleted).padStart(2, '0')} accent="gold" /><Stat icon={Flame} label="CURRENT STREAK" value="01 DAY" accent="violet" /></motion.section>
+              <motion.div className="section-heading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}><div><p className="kicker">CHOOSE YOUR PATH</p><h2>Active domains</h2></div><span className="domain-count">{CATEGORIES.length} DOMAINS UNLOCKED</span></motion.div>
               <section className="category-grid">{CATEGORIES.map((category, index) => { const categoryItems = items.filter((item) => item.category === category.id); const completed = categoryItems.filter((item) => item.status === 'Completed').length; const percentage = categoryItems.length ? Math.round((completed / categoryItems.length) * 100) : 0; return <CategoryCard key={category.id} category={category} index={index} count={categoryItems.length} completed={completed} percentage={percentage} onClick={() => setSelectedCategory(category)} />; })}</section>
             </motion.div>
           ) : <CategoryDetailView key="detail" category={selectedCategory} items={items.filter((item) => item.category === selectedCategory.id)} onBack={() => setSelectedCategory(null)} onAdd={addItem} onToggleStatus={toggleStatus} />}
@@ -163,6 +185,10 @@ export default function App() {
       </main>
     </div>
   );
+}
+
+function BootScreen() {
+  return <motion.div className="boot-screen" initial={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.55 }}><div className="boot-energy boot-energy-one" /><div className="boot-energy boot-energy-two" /><div className="boot-particles">{Array.from({ length: 14 }, (_, index) => <i key={index} />)}</div><motion.div className="boot-core" initial={{ opacity: 0, scale: 0.4, rotate: -22 }} animate={{ opacity: 1, scale: 1, rotate: 0 }} transition={{ duration: 0.8, ease: 'easeOut' }}><div className="boot-logo-mark"><Zap size={45} fill="currentColor" /></div><div className="boot-rune rune-one" /><div className="boot-rune rune-two" /></motion.div><motion.div className="boot-copy" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55, duration: 0.45 }}><p>SIDE<span>QUEST</span></p><small>SYSTEM AWAKENING</small></motion.div><motion.div className="boot-progress" initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ delay: 0.8, duration: 1.45, ease: 'easeInOut' }} /></motion.div>;
 }
 
 function Stat({ icon: Icon, label, value, accent }) { return <div className={`stat-cell accent-${accent}`}><Icon size={17} /><div><span>{label}</span><strong>{value}</strong></div></div>; }
@@ -185,7 +211,7 @@ function CategoryDetailView({ category, items, onBack, onAdd, onToggleStatus }) 
 
 function QuestCard({ item, index, onToggle }) {
   const statusIndex = STATUS_ORDER.indexOf(item.status);
-  return <motion.button className={`quest-card status-${item.status.toLowerCase().replace(' ', '-')}`} onClick={onToggle} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.06 }} whileTap={{ scale: 0.985 }}><div className="quest-number">0{index + 1}</div><div className="quest-main"><div className="quest-title-row"><h3>{item.title}</h3><span className="quest-status">{item.status === 'Completed' && <Check size={12} />}{item.status}</span></div><div className="quest-meta"><span>MISSION OBJECTIVE</span><span className="status-steps">{STATUS_ORDER.map((status, step) => <i key={status} className={step <= statusIndex ? 'lit' : ''} />)}</span><span>UPDATED {new Date(item.updated_at).toLocaleDateString('en', { month: 'short', day: 'numeric' }).toUpperCase()}</span></div></div><ChevronRight className="quest-arrow" size={19} /></motion.button>;
+  return <motion.button className={`quest-card status-${item.status.toLowerCase().replace(' ', '-')}`} onClick={onToggle} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: index * 0.06 }} whileHover={{ x: 4 }} whileTap={{ scale: 0.985 }}><div className="quest-number">0{index + 1}</div><div className="quest-main"><div className="quest-title-row"><h3>{item.title}</h3><span className="quest-status">{item.status === 'Completed' && <Check size={12} />}{item.status}</span></div><div className="quest-meta"><span>MISSION OBJECTIVE</span><span className="status-steps">{STATUS_ORDER.map((status, step) => <i key={status} className={step <= statusIndex ? 'lit' : ''} />)}</span><span>UPDATED {new Date(item.updated_at).toLocaleDateString('en', { month: 'short', day: 'numeric' }).toUpperCase()}</span></div></div><ChevronRight className="quest-arrow" size={19} /></motion.button>;
 }
 
-function EmptyState({ onAdd }) { return <motion.button className="empty-state" onClick={onAdd} initial={{ opacity: 0 }} animate={{ opacity: 1 }}><div className="empty-sigil"><Plus size={25} /></div><h3>Begin your first mission</h3><p>Every great run starts with a single quest.</p><span>INITIALIZE QUEST <Zap size={14} /></span></motion.button>; }
+function EmptyState({ onAdd }) { return <motion.button className="empty-state" onClick={onAdd} initial={{ opacity: 0 }} animate={{ opacity: 1 }} whileHover={{ scale: 1.01 }}><div className="empty-sigil"><Plus size={25} /></div><h3>Begin your first mission</h3><p>Every great run starts with a single quest.</p><span>INITIALIZE QUEST <Zap size={14} /></span></motion.button>; }
